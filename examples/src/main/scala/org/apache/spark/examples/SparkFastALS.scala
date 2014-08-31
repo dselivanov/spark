@@ -43,16 +43,6 @@ object SparkFastALS {
   // Regularization parameter
   var REG = 0
 
-
-  def minimizer(B: BDM[Double]) : BDM[Double] = {
-    val mid = (B.t * B)
-
-    for(i <- 0 until rank)
-      mid(i, i) += REG
-
-    B * inv(mid)
-  }
-
   /**
    * Compute (Proj(X - AB^T) + AB^T) C
    * @param X A distributed Matrix
@@ -79,12 +69,59 @@ object SparkFastALS {
     // Compute AB^T * C
     val part2 = A * (B.t * C)
 
-    println(s"dimension of part1 " + part1.rows + " " + part1.cols)
-    println(s"dimension of part2 " + part2.rows + " " + part2.cols)
+    part1 + part2
+  }
+
+  /**
+   * Compute (Proj(X - AB^T) + AB^T)^T C
+   * @param Xt A distributed Matrix
+   * @param A local matrix of factors
+   * @param B local matrix of factors
+   * @param C local matrix to be multiplied by
+   * @return Evaluate the expression (Proj(X - AB^T) + AB^T) C
+   */
+  def multByXstarTranspose(Xt: IndexedRowMatrix, A: BDM[Double],
+                  B: BDM[Double], C: BDM[Double]) : BDM[Double] = {
+    // Compute Proj(X - AB^T)^T
+    val xminusab_rows = Xt.rows.map { row =>
+      val v = row.vector.toBreeze.asInstanceOf[BSV[Double]].mapActivePairs((j, jVal) =>
+        jVal - (A(j,::) * B(row.index.toInt,::).t)
+      )
+      val spRow  = Vectors.fromBreeze(v)
+      new IndexedRow(row.index, spRow)
+    }
+    val xminusabT = new IndexedRowMatrix(xminusab_rows, Xt.numRows().toInt, Xt.numCols().toInt)
+
+    // Compute Proj(X - AB^T) * C
+    val part1 = xminusabT.multiply(Matrices.fromBreeze(C)).toBreeze()
+
+    // Compute AB^T * C
+    val part2 = B * (A.t * C)
 
     part1 + part2
   }
 
+  /**
+   * Helper function to compute B * (B^T B + REG*I)^-1
+   * @param B local matrix B
+   * @return B * (B^T B + REG*I)^-1
+   */
+  def minimizer(B: BDM[Double]) : BDM[Double] = {
+    val mid = (B.t * B)
+
+    for(i <- 0 until rank)
+      mid(i, i) += REG
+
+    B * inv(mid)
+  }
+
+  /**
+   * Compute loss for current model
+   * @param A Dense matrix of factors
+   * @param B Dense matrix of factors
+   * @param X Distributed data matrix
+   * @return RMSE for the given model factors
+   */
   def computeLoss(A: BDM[Double], B: BDM[Double], X:IndexedRowMatrix) : Double = {
     math.sqrt(X.rows.map { row =>
       row.vector.toBreeze.asInstanceOf[BSV[Double]].mapActivePairs((j, jVal) =>
@@ -101,8 +138,8 @@ object SparkFastALS {
         U = u.getOrElse("5").toInt
         NNZ = nn.getOrElse("23").toInt
         rank = trank.getOrElse("2").toInt
-        ITERATIONS = iters.getOrElse("5").toInt
-        REG = reg.getOrElse("100").toInt
+        ITERATIONS = iters.getOrElse("20").toInt
+        REG = reg.getOrElse("1").toInt
 
       case _ =>
         System.err.println("Usage: SparkFastALS [M] [U] [nnz] [rank] [iters] [regularization]")
@@ -122,15 +159,13 @@ object SparkFastALS {
     }.reduceByKey(_ + _).map{case (a, b) => MatrixEntry(a._1, a._2, b)}
 
     val R = new CoordinateMatrix(entries, M, U).toIndexedRowMatrix()
+    val Rt = new CoordinateMatrix(entries.map(a => MatrixEntry(a.j, a.i, a.value)), U, M).toIndexedRowMatrix()
 
     // Initialize m and u
     var ms = BDM.ones[Double](M, rank) / (M.toDouble * M)
     var us = BDM.ones[Double](U, rank) / (U.toDouble * U)
 
     // Iteratively update movies then users
-    // var msb = sc.broadcast(ms)
-    // var usb = sc.broadcast(us)
-
     for (iter <- 1 to ITERATIONS) {
       println("Iteration " + iter + ":")
 
@@ -140,11 +175,11 @@ object SparkFastALS {
 
       // Update us
       println("Computing new us")
-      //us = multByXstar(R, ms, us, minimizer(ms))
+      us = multByXstarTranspose(Rt, ms, us, minimizer(ms))
 
       println("error = " + computeLoss(ms, us, R))
-      //println(us.mkString(", "))
-      //println(ms.mkString(", "))
+      println(us.toString)
+      println(ms.toString)
       println()
     }
 
