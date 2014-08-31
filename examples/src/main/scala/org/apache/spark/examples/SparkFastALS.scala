@@ -17,16 +17,17 @@
 
 package org.apache.spark.mllib.examples
 
-import breeze.linalg.{DenseVector => BDV, DenseMatrix => BDM}
-import breeze.linalg._
+import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, DenseMatrix => BDM}
+import breeze.linalg.inv
 import org.apache.spark.SparkContext._
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.mllib.linalg.distributed.RowMatrix
+import org.apache.spark.mllib.linalg._
+import org.apache.spark.mllib.linalg.distributed._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.{SparkConf, SparkContext}
 
 /**
- * Generalized Low Rank Models for Spark
+ * Fast ALS for Spark
  */
 object SparkFastALS {
   // Number of movies
@@ -44,14 +45,51 @@ object SparkFastALS {
 
 
   def minimizer(B: BDM[Double]) : BDM[Double] = {
-    val btb =  B * inv(B.t * B + BDM.eye[Double](rank) * REG)
+    val mid = (B.t * B)
+
+    for(i <- 0 until rank)
+      mid(i, i) += REG
+
+    B * inv(mid)
   }
 
-  def multByXstar(X: RowMatrix, A: BDM[Double],
+  /**
+   * Compute (Proj(X - AB^T) + AB^T) C
+   * @param X A distributed Matrix
+   * @param A local matrix of factors
+   * @param B local matrix of factors
+   * @param C local matrix to be multiplied by
+   * @return Evaluate the expression (Proj(X - AB^T) + AB^T) C
+   */
+  def multByXstar(X: IndexedRowMatrix, A: BDM[Double],
                   B: BDM[Double], C: BDM[Double]) : BDM[Double] = {
-    val xminusab = X.rows.map(row => )
+    // Compute Proj(X - AB^T)
+    val xminusab_rows = X.rows.map { row =>
+      val v = row.vector.toBreeze.asInstanceOf[BSV[Double]].mapActivePairs((j, jVal) =>
+        jVal - (A(row.index.toInt,::) * B(j,::).t)
+      )
+      val spRow  = Vectors.fromBreeze(v)
+      new IndexedRow(row.index, spRow)
+    }
+    val xminusab = new IndexedRowMatrix(xminusab_rows, X.numRows().toInt, X.numCols().toInt)
 
+    // Compute Proj(X - AB^T) * C
+    val part1 = xminusab.multiply(Matrices.fromBreeze(C)).toBreeze()
 
+    // Compute AB^T * C
+    val part2 = A * (B.t * C)
+
+    println(s"dimension of part1 " + part1.rows + " " + part1.cols)
+    println(s"dimension of part2 " + part2.rows + " " + part2.cols)
+
+    part1 + part2
+  }
+
+  def computeLoss(A: BDM[Double], B: BDM[Double], X:IndexedRowMatrix) : Double = {
+    math.sqrt(X.rows.map { row =>
+      row.vector.toBreeze.asInstanceOf[BSV[Double]].mapActivePairs((j, jVal) =>
+        math.pow(jVal - (A(row.index.toInt,::) * B(j,::).t), 2)).sum
+    }.mean())
   }
 
   def main(args: Array[String]) {
@@ -77,41 +115,34 @@ object SparkFastALS {
     val sc = new SparkContext(sparkConf)
 
     // Create data
-    val R = sc.parallelize(1 to NNZ).map{x =>
+    val entries = sc.parallelize(1 to NNZ).map{x =>
       val i = math.round(math.random * (M - 1)).toInt
       val j = math.round(math.random * (U - 1)).toInt
       ((i, j), math.random)
-    }.reduceByKey(_ + _).map{case (a, b) => (a._1, a._2, b)}
+    }.reduceByKey(_ + _).map{case (a, b) => MatrixEntry(a._1, a._2, b)}
 
-    // Transpose data
-    val RT = R.map { case (i, j, rij) => (j, i, rij) }
+    val R = new CoordinateMatrix(entries, M, U).toIndexedRowMatrix()
 
     // Initialize m and u
     var ms = BDM.ones[Double](M, rank) / (M.toDouble * M)
     var us = BDM.ones[Double](U, rank) / (U.toDouble * U)
 
     // Iteratively update movies then users
-    var msb = sc.broadcast(ms)
-    var usb = sc.broadcast(us)
+    // var msb = sc.broadcast(ms)
+    // var usb = sc.broadcast(us)
 
     for (iter <- 1 to ITERATIONS) {
       println("Iteration " + iter + ":")
 
       // Update ms
-      println("Computing gradient losses")
-      var lg = computeLossGrads(msb, usb, R)
-      println("Updating M factors")
-      ms = update(usb, msb, lg, 1.0/iter)
-      msb = sc.broadcast(ms) // Re-broadcast ms because it was updated
+      println("Computing new ms")
+      ms = multByXstar(R, ms, us, minimizer(us))
 
       // Update us
-      println("Computing gradient losses")
-      lg = computeLossGrads(usb, msb, RT)
-      println("Updating U factors")
-      us = update(msb, usb, lg, 1.0/iter)
-      usb = sc.broadcast(us) // Re-broadcast us because it was updated
+      println("Computing new us")
+      //us = multByXstar(R, ms, us, minimizer(ms))
 
-      println("error = " + computeLoss(msb, usb, R).map { case (_, _, lij) => lij}.mean())
+      println("error = " + computeLoss(ms, us, R))
       //println(us.mkString(", "))
       //println(ms.mkString(", "))
       println()
