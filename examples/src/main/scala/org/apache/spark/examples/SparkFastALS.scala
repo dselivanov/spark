@@ -53,10 +53,14 @@ object SparkFastALS {
    */
   def multByXstar(X: IndexedRowMatrix, A: BDM[Double],
                   B: BDM[Double], C: BDM[Double]) : BDM[Double] = {
+    val sc = X.rows.context
+    val Ab = sc.broadcast[BDM[Double]](A)
+    val Bb = sc.broadcast[BDM[Double]](B)
+
     // Compute Proj(X - AB^T)
     val xminusab_rows = X.rows.map { row =>
       val v = row.vector.toBreeze.asInstanceOf[BSV[Double]].mapActivePairs((j, jVal) =>
-        jVal - (A(row.index.toInt,::) * B(j,::).t)
+        jVal - (Ab.value(row.index.toInt,::) * Bb.value(j,::).t)
       )
       val spRow  = Vectors.fromBreeze(v)
       new IndexedRow(row.index, spRow)
@@ -82,10 +86,14 @@ object SparkFastALS {
    */
   def multByXstarTranspose(Xt: IndexedRowMatrix, A: BDM[Double],
                   B: BDM[Double], C: BDM[Double]) : BDM[Double] = {
+    val sc = Xt.rows.context
+    val Ab = sc.broadcast[BDM[Double]](A)
+    val Bb = sc.broadcast[BDM[Double]](B)
+
     // Compute Proj(X - AB^T)^T
     val xminusab_rows = Xt.rows.map { row =>
       val v = row.vector.toBreeze.asInstanceOf[BSV[Double]].mapActivePairs((j, jVal) =>
-        jVal - (A(j,::) * B(row.index.toInt,::).t)
+        jVal - (Ab.value(j,::) * Bb.value(row.index.toInt,::).t)
       )
       val spRow  = Vectors.fromBreeze(v)
       new IndexedRow(row.index, spRow)
@@ -95,7 +103,7 @@ object SparkFastALS {
     // Compute Proj(X - AB^T) * C
     val part1 = xminusabT.multiply(Matrices.fromBreeze(C)).toBreeze()
 
-    // Compute AB^T * C
+    // Compute BA^T * C
     val part2 = B * (A.t * C)
 
     part1 + part2
@@ -123,9 +131,13 @@ object SparkFastALS {
    * @return RMSE for the given model factors
    */
   def computeLoss(A: BDM[Double], B: BDM[Double], X:IndexedRowMatrix) : Double = {
+    val sc = X.rows.context
+    val Ab = sc.broadcast[BDM[Double]](A)
+    val Bb = sc.broadcast[BDM[Double]](B)
+
     math.sqrt(X.rows.map { row =>
       row.vector.toBreeze.asInstanceOf[BSV[Double]].mapActivePairs((j, jVal) =>
-        math.pow(jVal - (A(row.index.toInt,::) * B(j,::).t), 2)).sum
+        math.pow(jVal - (Ab.value(row.index.toInt,::) * Bb.value(j,::).t), 2)).sum
     }.mean())
   }
 
@@ -178,8 +190,6 @@ object SparkFastALS {
       us = multByXstarTranspose(Rt, ms, us, minimizer(ms))
 
       println("error = " + computeLoss(ms, us, R))
-      println(us.toString)
-      println(ms.toString)
       println()
     }
 
