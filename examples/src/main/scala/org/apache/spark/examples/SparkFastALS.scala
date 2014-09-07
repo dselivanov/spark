@@ -167,7 +167,7 @@ object SparkFastALS {
     val entries = sc.parallelize(1 to NNZ).map{x =>
       val i = math.round(math.random * (M - 1)).toInt
       val j = math.round(math.random * (U - 1)).toInt
-      ((i, j), math.random)
+      ((math.abs(i), math.abs(j)), math.random)
     }.reduceByKey(_ + _).map{case (a, b) => MatrixEntry(a._1, a._2, b)}
 
     val R = new CoordinateMatrix(entries, M, U).toIndexedRowMatrix()
