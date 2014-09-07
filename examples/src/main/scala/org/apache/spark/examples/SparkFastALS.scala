@@ -164,11 +164,10 @@ object SparkFastALS {
     val sc = new SparkContext(sparkConf)
 
     // Create data
-    val entries = sc.parallelize(1 to NNZ).map{x =>
-      val i = math.round(math.random * (M - 1)).toInt
-      val j = math.round(math.random * (U - 1)).toInt
-      ((math.abs(i), math.abs(j)), math.random)
-    }.reduceByKey(_ + _).map{case (a, b) => MatrixEntry(a._1, a._2, b)}
+    val entries = sc.parallelize(0 until M).flatMap{i =>
+      val indices = scala.util.Random.shuffle(Array.tabulate(U)(x=>x).toSeq).take(NNZ)
+      indices.map(j => MatrixEntry(i, j, scala.math.random))
+    }
 
     val R = new CoordinateMatrix(entries, M, U).toIndexedRowMatrix()
     val Rt = new CoordinateMatrix(entries.map(a => MatrixEntry(a.j, a.i, a.value)), U, M).toIndexedRowMatrix()
