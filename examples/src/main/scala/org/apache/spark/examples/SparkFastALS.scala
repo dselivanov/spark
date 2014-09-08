@@ -178,7 +178,9 @@ object SparkFastALS {
     val entries = sc.parallelize(0 until M).flatMap{i =>
       val noShuffle = Array.tabulate(U)(x=>x)
       assert(noShuffle.length == U)
+      println(noShuffle.toSeq.mkString(","))
       val shuffled = customShuffle(noShuffle)
+      println(shuffled.toSeq.mkString(","))
       assert(shuffled.length > 0)
       val taken = shuffled.take(NNZ)
       assert(taken.length == NNZ)
