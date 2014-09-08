@@ -142,7 +142,7 @@ object SparkFastALS {
     }.mean())
   }
 
-  def customShuffle[T](a: Array[T]) = {
+  def customShuffle[T](a: Array[T]) : Array[T] = {
     for (i <- 1 until a.size reverse) {
       val j = (scala.math.random*1000000000).toInt % (i + 1)
       val t = a(i)
