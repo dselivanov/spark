@@ -176,10 +176,11 @@ object SparkFastALS {
 
     // Create data
     val entries = sc.parallelize(0 until M).flatMap{i =>
-      val shuffled = customShuffle(Array.tabulate(U)(x=>x))
-      assert(shuffled.size > 0)
+      val noShuffle = Array.tabulate(U)(x=>x)
+      val shuffled = customShuffle(noShuffle)
+      assert(shuffled.length > 0)
       val taken = shuffled.take(NNZ)
-      assert(taken.size == NNZ)
+      assert(taken.length == NNZ)
       taken.map(j => MatrixEntry(i, j, scala.math.random))
     }
 
