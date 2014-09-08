@@ -166,9 +166,7 @@ object SparkFastALS {
 
     // Create data
     val entries = sc.parallelize(0 until M).flatMap{i =>
-      val inc = Array.tabulate(U)(x=>x).toSeq
-      val indices = Random.shuffle(inc).take(NNZ)
-      indices.map(j => MatrixEntry(i, j, scala.math.random))
+      scala.util.Random.shuffle(List.range(0, U)).take(NNZ).map(j => MatrixEntry(i, j, scala.math.random))
     }
 
     println("running with matrix of size: " + entries.count())
