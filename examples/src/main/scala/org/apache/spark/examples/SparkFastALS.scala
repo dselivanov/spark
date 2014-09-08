@@ -25,6 +25,7 @@ import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.distributed._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.{SparkConf, SparkContext}
+import scala.util._
 
 /**
  * Fast ALS for Spark
@@ -165,9 +166,12 @@ object SparkFastALS {
 
     // Create data
     val entries = sc.parallelize(0 until M).flatMap{i =>
-      val indices = scala.util.Random.shuffle(Array.tabulate(U)(x=>x).toSeq).take(NNZ)
+      val inc = Array.tabulate(U)(x=>x).toSeq
+      val indices = Random.shuffle(inc).take(NNZ)
       indices.map(j => MatrixEntry(i, j, scala.math.random))
     }
+
+    println("running with matrix of size: " + entries.count())
 
     val R = new CoordinateMatrix(entries, M, U).toIndexedRowMatrix()
     val Rt = new CoordinateMatrix(entries.map(a => MatrixEntry(a.j, a.i, a.value)), U, M).toIndexedRowMatrix()
