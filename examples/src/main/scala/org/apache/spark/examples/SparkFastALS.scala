@@ -144,7 +144,7 @@ object SparkFastALS {
 
   def customShuffle[T](a: Array[T]) = {
     for (i <- 1 until a.size reverse) {
-      val j = util.Random nextInt (i + 1)
+      val j = (scala.math.random*1000000000).toInt % (i + 1)
       val t = a(i)
       a(i) = a(j)
       a(j) = t
@@ -177,6 +177,7 @@ object SparkFastALS {
     // Create data
     val entries = sc.parallelize(0 until M).flatMap{i =>
       val noShuffle = Array.tabulate(U)(x=>x)
+      assert(noShuffle.length == U)
       val shuffled = customShuffle(noShuffle)
       assert(shuffled.length > 0)
       val taken = shuffled.take(NNZ)
