@@ -142,16 +142,6 @@ object SparkFastALS {
     }.mean())
   }
 
-  def customShuffle[T](a: Array[T]) : Array[T] = {
-    for (i <- 1 until a.size reverse) {
-      val j = (scala.math.random*1000000000).toInt % (i + 1)
-      val t = a(i)
-      a(i) = a(j)
-      a(j) = t
-    }
-    a
-  }
-
   def main(args: Array[String]) {
     val options = (0 to 5).map(i => if (i < args.length) Some(args(i)) else None)
 
@@ -176,14 +166,11 @@ object SparkFastALS {
 
     // Create data
     val entries = sc.parallelize(0 until M).flatMap{i =>
-      val forShuffle = Array.tabulate(U)(x=>x)
-      assert(U > 0)
-      assert(forShuffle.length == U)
-      customShuffle(forShuffle)
-      assert(forShuffle.length == U)
-      val taken = Array.tabulate(NNZ)(i=>forShuffle(i))
-      assert(taken.length == NNZ)
-      taken.map(j => MatrixEntry(i, j, scala.math.random))
+      val dU = U
+      val dNNZ = NNZ
+      assert(dU > 0)
+      assert(dNNZ > 0)
+      Random.shuffle(List.range(0, dU)).take(dNNZ).map(j => MatrixEntry(i, j, scala.math.random))
     }
 
     println("running with matrix of size: " + entries.count())
