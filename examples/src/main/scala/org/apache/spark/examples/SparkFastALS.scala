@@ -32,17 +32,17 @@ import scala.util._
  */
 object SparkFastALS {
   // Number of movies
-  var M = 0
+  var M = 1000000
   // Number of users
-  var U = 0
-  // Number of nonzeros
-  var NNZ = 0
+  var U = 1000000
+  // Number of nonzeros per row
+  var NNZ = 1000
   // Number of features
-  var rank = 0
+  var rank = 5
   // Number of iterations
-  var ITERATIONS = 0
+  var ITERATIONS = 2
   // Regularization parameter
-  var REG = 0
+  var REG = 10
 
   /**
    * Compute (Proj(X - AB^T) + AB^T) C
