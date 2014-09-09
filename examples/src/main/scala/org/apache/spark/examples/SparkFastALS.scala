@@ -32,17 +32,17 @@ import scala.util._
  */
 object SparkFastALS {
   // Number of movies
-  var M = 1000000
+  val M = 1000000
   // Number of users
-  var U = 1000000
+  val U = 1000000
   // Number of nonzeros per row
-  var NNZ = 1000
+  val NNZ = 1000
   // Number of features
-  var rank = 5
+  val rank = 5
   // Number of iterations
-  var ITERATIONS = 2
+  val ITERATIONS = 2
   // Regularization parameter
-  var REG = 10
+  val REG = 10
 
   /**
    * Compute (Proj(X - AB^T) + AB^T) C
@@ -143,37 +143,19 @@ object SparkFastALS {
   }
 
   def main(args: Array[String]) {
-    val options = (0 to 5).map(i => if (i < args.length) Some(args(i)) else None)
-
-    options.toArray match {
-      case Array(m, u, nn, trank, iters, reg) =>
-        M = m.getOrElse("10").toInt
-        U = u.getOrElse("5").toInt
-        NNZ = nn.getOrElse("23").toInt
-        rank = trank.getOrElse("2").toInt
-        ITERATIONS = iters.getOrElse("20").toInt
-        REG = reg.getOrElse("1").toInt
-
-      case _ =>
-        System.err.println("Usage: SparkFastALS [M] [U] [nnz] [rank] [iters] [regularization]")
-        System.exit(1)
-    }
-
     printf("Running with M=%d, U=%d, nnz=%d, rank=%d, iters=%d, reg=%d\n", M, U, NNZ, rank, ITERATIONS, REG)
 
     val sparkConf = new SparkConf().setAppName("SparkFastALS")
     val sc = new SparkContext(sparkConf)
 
     // Create data
-    val entries = sc.parallelize(0 until M).flatMap{i =>
+    val entries = sc.parallelize(0 until M).flatMap { i =>
       val dU = U
       val dNNZ = NNZ
       assert(dU > 0)
       assert(dNNZ > 0)
       Random.shuffle(List.range(0, dU)).take(dNNZ).map(j => MatrixEntry(i, j, scala.math.random))
     }
-
-    println("running with matrix of size: " + entries.count())
 
     val R = new CoordinateMatrix(entries, M, U).toIndexedRowMatrix()
     val Rt = new CoordinateMatrix(entries.map(a => MatrixEntry(a.j, a.i, a.value)), U, M).toIndexedRowMatrix()
