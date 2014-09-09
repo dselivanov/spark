@@ -150,11 +150,7 @@ object SparkFastALS {
 
     // Create data
     val entries = sc.parallelize(0 until M).flatMap { i =>
-      val dU = U
-      val dNNZ = NNZ
-      assert(dU > 0)
-      assert(dNNZ > 0)
-      Random.shuffle(List.range(0, dU)).take(dNNZ).map(j => MatrixEntry(i, j, scala.math.random))
+      Random.shuffle(List.range(0, U)).take(NNZ).map(j => MatrixEntry(i, j, scala.math.random))
     }
 
     val R = new CoordinateMatrix(entries, M, U).toIndexedRowMatrix()
