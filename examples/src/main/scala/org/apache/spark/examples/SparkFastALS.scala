@@ -34,7 +34,7 @@ object SparkFastALS {
   // Number of movies
   val M = 1000000
   // Number of users
-  val U = 1000000
+  val U = 1000
   // Number of nonzeros per row
   val NNZ = 1000
   // Number of features
@@ -60,7 +60,7 @@ object SparkFastALS {
 
     // Compute Proj(X - AB^T)
     val xminusab_rows = X.rows.map { row =>
-      val v = row.vector.toBreeze.asInstanceOf[BSV[Double]].mapActivePairs((j, jVal) =>
+      val v = row.vector.toBreeze.asInstanceOf[BDV[Double]].mapActivePairs((j, jVal) =>
         jVal - (Ab.value(row.index.toInt,::) * Bb.value(j,::).t)
       )
       val spRow  = Vectors.fromBreeze(v)
@@ -93,7 +93,7 @@ object SparkFastALS {
 
     // Compute Proj(X - AB^T)^T
     val xminusab_rows = Xt.rows.map { row =>
-      val v = row.vector.toBreeze.asInstanceOf[BSV[Double]].mapActivePairs((j, jVal) =>
+      val v = row.vector.toBreeze.asInstanceOf[BDV[Double]].mapActivePairs((j, jVal) =>
         jVal - (Ab.value(j,::) * Bb.value(row.index.toInt,::).t)
       )
       val spRow  = Vectors.fromBreeze(v)
@@ -137,7 +137,7 @@ object SparkFastALS {
     val Bb = sc.broadcast[BDM[Double]](B)
 
     math.sqrt(X.rows.map { row =>
-      row.vector.toBreeze.asInstanceOf[BSV[Double]].mapActivePairs((j, jVal) =>
+      row.vector.toBreeze.asInstanceOf[BDV[Double]].mapActivePairs((j, jVal) =>
         math.pow(jVal - (Ab.value(row.index.toInt,::) * Bb.value(j,::).t), 2)).sum
     }.mean())
   }
@@ -149,12 +149,16 @@ object SparkFastALS {
     val sc = new SparkContext(sparkConf)
 
     // Create data
-    val entries = sc.parallelize(0 until M).flatMap { i =>
-      Random.shuffle(List.range(0, U)).take(NNZ).map(j => MatrixEntry(i, j, scala.math.random))
+    val entries = sc.parallelize(0 until M).map { i =>
+      IndexedRow(i, Vectors.dense((0 until U).map(j => math.sin(i*j+i+j)).toArray))
     }
 
-    val R = new CoordinateMatrix(entries, M, U).toIndexedRowMatrix()
-    val Rt = new CoordinateMatrix(entries.map(a => MatrixEntry(a.j, a.i, a.value)), U, M).toIndexedRowMatrix()
+    val entries_t = sc.parallelize(0 until U).map { i =>
+      IndexedRow(i, Vectors.dense((0 until M).map(j => math.sin(i*j+i+j)).toArray))
+    }
+
+    val R = new IndexedRowMatrix(entries, M, U)
+    val Rt = new IndexedRowMatrix(entries_t, U, M)
 
     // Initialize m and u
     var ms = BDM.ones[Double](M, rank) / (M.toDouble * M)
