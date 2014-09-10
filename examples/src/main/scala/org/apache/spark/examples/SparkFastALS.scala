@@ -42,7 +42,7 @@ object SparkFastALS {
   // Number of iterations
   val ITERATIONS = 2
   // Regularization parameter
-  val REG = 10
+  val REG = 2
 
   /**
    * Compute (Proj(X - AB^T) + AB^T) C
@@ -176,6 +176,7 @@ object SparkFastALS {
       println("Computing new us")
       us = multByXstarTranspose(Rt, ms, us, minimizer(ms))
 
+      // Comment this out for large runs to avoid an extra pass
       println("error = " + computeLoss(ms, us, R))
       println()
     }
