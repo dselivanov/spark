@@ -32,17 +32,17 @@ import scala.util._
  */
 object SparkFastALS {
   // Number of movies
-  val M = 1000000
+  val M = 10000000
   // Number of users
-  val U = 1000
-  // Number of nonzeros per row
-  val NNZ = 1000
+  val U = 100
   // Number of features
   val rank = 5
   // Number of iterations
   val ITERATIONS = 2
   // Regularization parameter
   val REG = 2
+  // Number of chunks for data (set to number of cores in cluster)
+  val NUMCHUNKS = 200
 
   /**
    * Compute (Proj(X - AB^T) + AB^T) C
@@ -143,17 +143,17 @@ object SparkFastALS {
   }
 
   def main(args: Array[String]) {
-    printf("Running with M=%d, U=%d, nnz=%d, rank=%d, iters=%d, reg=%d\n", M, U, NNZ, rank, ITERATIONS, REG)
+    printf("Running with M=%d, U=%d, rank=%d, iters=%d, reg=%d\n", M, U, rank, ITERATIONS, REG)
 
     val sparkConf = new SparkConf().setAppName("SparkFastALS")
     val sc = new SparkContext(sparkConf)
 
     // Create data
-    val entries = sc.parallelize(0 until M).map { i =>
+    val entries = sc.parallelize(0 until M, NUMCHUNKS).map { i =>
       IndexedRow(i, Vectors.dense((0 until U).map(j => math.sin(i*j+i+j)).toArray))
     }
 
-    val entries_t = sc.parallelize(0 until U).map { i =>
+    val entries_t = sc.parallelize(0 until U, NUMCHUNKS).map { i =>
       IndexedRow(i, Vectors.dense((0 until M).map(j => math.sin(i*j+i+j)).toArray))
     }
 
