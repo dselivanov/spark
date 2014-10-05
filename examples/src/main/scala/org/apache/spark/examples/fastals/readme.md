@@ -1,10 +1,27 @@
 # SparkFastALS
 
+We provide a distributed version of FastALS. 
+The input matrix to be factored is split row-by-row across many machines. 
+The transpose of the input is also split row-by-row across the machines. 
+The current model (i.e. the current guess for `A`, `B`) 
+is repeated and held in memory on every machine. Thus the total time taken 
+by the computation is proportional to the number of non-zeros divided by the number of
+ CPU cores, with the restriction that the model should fit in memory.
+
+At every iteration, the current model is broadcast to all machines, 
+such that there is only one copy of the model on each machine. 
+Each CPU core on a machine will process a partition of the input matrix, 
+using the local copy of the model available. 
+This means that even though one machine can have many cores 
+acting on a subset of the input data, all those cores can share the same 
+local copy of the model, thus saving RAM. This saving is especially pronounced on machines with many cores.
+
 SparkFastALS is a Spark package for modeling and fitting matrix factorization.
 For more information on FastALS, see [our paper](http://www.stanford.edu/~rezab/papers/fastals.pdf).
-This implementation is of Algorithm 4.1 in the paper:
+This implementation is of Algorithm 4.1 in the paper.
 
-![alt text](fastals.png)
+
+![Fast ALS](fastals.png)
 
 ## Compilation
 
@@ -22,8 +39,7 @@ To run with 4GB of ram:
 
 # FastALS
 
-For example, the following code fits a model using squared error loss and quadratic
-regularization with `rank=5` on the matrix `A`:
+For example, the following code fits a model outputting `ms` and `us` as the factors:
 
     // Iteratively update movies then users
     for (iter <- 1 to ITERATIONS) {
