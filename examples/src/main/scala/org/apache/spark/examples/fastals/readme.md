@@ -4,7 +4,7 @@ SparkFastALS is a Spark package for modeling and fitting matrix factorization.
 For more information on FastALS, see [our paper](http://www.stanford.edu/~rezab/papers/fastals.pdf).
 This implementation is of Algorithm 4.1 in the paper:
 
-[alt text][fastals.png]
+[alt text](fastals.png)
 
 ## Compilation
 
