@@ -6,7 +6,7 @@ The transpose of the input is also split row-by-row across the machines.
 The current model (i.e. the current guess for `A`, `B`) 
 is repeated and held in memory on every machine. Thus the total time taken 
 by the computation is proportional to the number of non-zeros divided by the number of
- CPU cores, with the restriction that the model should fit in memory.
+ CPU cores, with the restriction that the model should fit in memory on a single machine.
 
 At every iteration, the current model is broadcast to all machines, 
 such that there is only one copy of the model on each machine. 
