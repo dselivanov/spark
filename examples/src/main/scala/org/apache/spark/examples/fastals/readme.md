@@ -1,6 +1,6 @@
 # SparkFastALS
 
-We provide a distributed version of FastALS. 
+SparkFastALS is a Spark package for modeling and fitting matrix factorization.
 The input matrix to be factored is split row-by-row across many machines. 
 The transpose of the input is also split row-by-row across the machines. 
 The current model (i.e. the current guess for `A`, `B`) 
@@ -16,10 +16,8 @@ This means that even though one machine can have many cores
 acting on a subset of the input data, all those cores can share the same 
 local copy of the model, thus saving RAM. This saving is especially pronounced on machines with many cores.
 
-SparkFastALS is a Spark package for modeling and fitting matrix factorization.
 For more information on FastALS, see [our paper](http://www.stanford.edu/~rezab/papers/fastals.pdf).
 This implementation is of Algorithm 4.1 in the paper.
-
 
 ![Fast ALS](fastals.png)
 
