@@ -17,8 +17,7 @@
 
 package org.apache.spark.mllib.examples
 
-import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, DenseMatrix => BDM}
-import breeze.linalg.inv
+import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, DenseMatrix => BDM, sum, inv}
 import org.apache.spark.SparkContext._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.mllib.linalg._
@@ -32,17 +31,17 @@ import scala.util._
  */
 object SparkFastALS {
   // Number of movies
-  val M = 10000000
+  val M = 100
   // Number of users
   val U = 100
   // Number of features
   val rank = 5
   // Number of iterations
-  val ITERATIONS = 2
+  val ITERATIONS = 100
   // Regularization parameter
-  val REG = 2
+  val REG = 0.0001
   // Number of chunks for data (set to number of cores in cluster)
-  val NUMCHUNKS = 200
+  val NUMCHUNKS = 4
 
   /**
    * Compute (Proj(X - AB^T) + AB^T) C
@@ -137,13 +136,13 @@ object SparkFastALS {
     val Bb = sc.broadcast[BDM[Double]](B)
 
     math.sqrt(X.rows.map { row =>
-      row.vector.toBreeze.asInstanceOf[BDV[Double]].mapActivePairs((j, jVal) =>
-        math.pow(jVal - (Ab.value(row.index.toInt,::) * Bb.value(j,::).t), 2)).sum
+      sum(row.vector.toBreeze.asInstanceOf[BDV[Double]].mapActivePairs((j, jVal) =>
+        math.pow(jVal - (Ab.value(row.index.toInt,::) * Bb.value(j,::).t), 2)))
     }.mean())
   }
 
   def main(args: Array[String]) {
-    printf("Running with M=%d, U=%d, rank=%d, iters=%d, reg=%d\n", M, U, rank, ITERATIONS, REG)
+    printf("Running with M=%d, U=%d, rank=%d, iters=%d, reg=%f\n", M, U, rank, ITERATIONS, REG)
 
     val sparkConf = new SparkConf().setAppName("SparkFastALS")
     val sc = new SparkContext(sparkConf)
@@ -151,11 +150,11 @@ object SparkFastALS {
     // Create data
     val entries = sc.parallelize(0 until M, NUMCHUNKS).map { i =>
       IndexedRow(i, Vectors.dense((0 until U).map(j => math.sin(i*j+i+j)).toArray))
-    }
+    }.cache()
 
     val entries_t = sc.parallelize(0 until U, NUMCHUNKS).map { i =>
       IndexedRow(i, Vectors.dense((0 until M).map(j => math.sin(i*j+i+j)).toArray))
-    }
+    }.cache()
 
     val R = new IndexedRowMatrix(entries, M, U)
     val Rt = new IndexedRowMatrix(entries_t, U, M)
@@ -163,6 +162,8 @@ object SparkFastALS {
     // Initialize m and u
     var ms = BDM.ones[Double](M, rank) / (M.toDouble * M)
     var us = BDM.ones[Double](U, rank) / (U.toDouble * U)
+
+    val errs = Array.ofDim[Double](ITERATIONS)
 
     // Iteratively update movies then users
     for (iter <- 1 to ITERATIONS) {
@@ -177,9 +178,10 @@ object SparkFastALS {
       us = multByXstarTranspose(Rt, ms, us, minimizer(ms))
 
       // Comment this out for large runs to avoid an extra pass
-      println("error = " + computeLoss(ms, us, R))
-      println()
+      errs(iter - 1) = computeLoss(ms, us, R)
     }
+
+    println("RMSEs: " + errs.mkString(", "))
 
     sc.stop()
   }
