@@ -35,6 +35,22 @@ class IndexedRowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
   ).map(x => IndexedRow(x._1, x._2))
   var indexedRows: RDD[IndexedRow] = _
 
+  val denseData = Seq(
+    Vectors.dense(0.0, 1.0, 2.0),
+    Vectors.dense(3.0, 4.0, 5.0),
+    Vectors.dense(6.0, 7.0, 8.0),
+    Vectors.dense(9.0, 0.0, 1.0)
+  )
+  val sparseData = Seq(
+    Vectors.sparse(3, Seq((1, 1.0), (2, 2.0))),
+    Vectors.sparse(3, Seq((0, 3.0), (1, 4.0), (2, 5.0))),
+    Vectors.sparse(3, Seq((0, 6.0), (1, 7.0), (2, 8.0))),
+    Vectors.sparse(3, Seq((0, 9.0), (2, 1.0)))
+  )
+
+  var denseMat: IndexedRowMatrix = _
+  var sparseMat: IndexedRowMatrix = _
+
   override def beforeAll() {
     super.beforeAll()
     indexedRows = sc.parallelize(data, 2)
@@ -152,6 +168,24 @@ class IndexedRowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
       A.computeSVD(-1)
     }
   }
+
+  test("similar columns") {
+    val colMags = Vectors.dense(math.sqrt(126), math.sqrt(66), math.sqrt(94))
+    val expected = BDM(
+      (0.0, 54.0, 72.0),
+      (0.0, 0.0, 78.0),
+      (0.0, 0.0, 0.0))
+
+    for (i <- 0 until n; j <- 0 until n) {
+      expected(i, j) /= (colMags(i) * colMags(j))
+    }
+
+    for (mat <- Seq(denseMat, sparseMat)) {
+      val G = mat.columnSimilarities()
+      assert(closeToZero(G.toBreeze() - expected))
+    }
+  }
+
 
   def closeToZero(G: BDM[Double]): Boolean = {
     G.valuesIterator.map(math.abs).sum < 1e-6
