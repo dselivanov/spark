@@ -291,12 +291,12 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
    * @since 1.3.0
    */
   def refreshTable(tableName: String): Unit = {
-    val tableIdent = new SqlParser().parseTableIdentifier(tableName)
+    val tableIdent = SqlParser.parseTableIdentifier(tableName)
     catalog.refreshTable(tableIdent)
   }
 
   protected[hive] def invalidateTable(tableName: String): Unit = {
-    val tableIdent = new SqlParser().parseTableIdentifier(tableName)
+    val tableIdent = SqlParser.parseTableIdentifier(tableName)
     catalog.invalidateTable(tableIdent)
   }
 
@@ -311,7 +311,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
    */
   @Experimental
   def analyze(tableName: String) {
-    val tableIdent = new SqlParser().parseTableIdentifier(tableName)
+    val tableIdent = SqlParser.parseTableIdentifier(tableName)
     val relation = EliminateSubQueries(catalog.lookupRelation(tableIdent.toSeq))
 
     relation match {
@@ -609,6 +609,11 @@ private[hive] object HiveContext {
     defaultValue = Some(hiveExecutionVersion),
     doc = "Version of the Hive metastore. Available options are " +
         s"<code>0.12.0</code> through <code>$hiveExecutionVersion</code>.")
+
+  val HIVE_EXECUTION_VERSION = stringConf(
+    key = "spark.sql.hive.version",
+    defaultValue = Some(hiveExecutionVersion),
+    doc = "Version of Hive used internally by Spark SQL.")
 
   val HIVE_METASTORE_JARS = stringConf("spark.sql.hive.metastore.jars",
     defaultValue = Some("builtin"),
